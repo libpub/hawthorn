@@ -7,6 +7,7 @@ import http
 import logging
 import traceback
 import tornado.web
+import tornado.httputil
 import tornado.gen
 import tornado.escape
 from .supports import singleton
@@ -157,7 +158,7 @@ def async_route(rule, **options):
         return f
     return decorator
 
-def args_as_dict(request):
+def args_as_dict(request: tornado.httputil.HTTPServerRequest):
     if hasattr(request, '_args_as_dict'):
         return getattr(request, '_args_as_dict')
     args = {}
@@ -172,7 +173,7 @@ def args_as_dict(request):
     setattr(request, '_args_as_dict', args)
     return args
 
-def request_body_as_json(request):
+def request_body_as_json(request: tornado.httputil.HTTPServerRequest):
     if hasattr(request, '_body_as_json'):
         return getattr(request, '_body_as_json')
     params = {}
