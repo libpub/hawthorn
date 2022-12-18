@@ -8,7 +8,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="hawthorn",
-    version="0.0.1",
+    version="0.0.2",
     author="kevinyjn",
     author_email="kevinyjn@gmail.com",
     description="common python programing encapsulation library",
@@ -16,6 +16,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/libpub/hawthorn",
     packages=setuptools.find_packages(exclude=[".tests", ".tests.", "tests.*", "tests"]),
+    include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
@@ -37,6 +38,7 @@ setuptools.setup(
         "requests",
         "tornado",
         "zeep[async]",
+        "pycurl",
         "motor",
         "aredis",
         "pyopenssl",
@@ -47,6 +49,7 @@ setuptools.setup(
         "aiosqlite",
         "pymssql",
         "protobuf==3.14.0",
-        "PyJWT"
+        "PyJWT",
+        "python-i18n[YAML]"
     ]
 )

@@ -139,7 +139,7 @@ class GeneralTornadoHandler(tornado.web.RequestHandler):
                 if not self._finished:
                     self.finish()
         else:
-            print('not callable cb:', cb)
+            LOG.debug('not callable cb:', cb)
             self.set_status(http.HTTPStatus.METHOD_NOT_ALLOWED)
             self.finish()
 

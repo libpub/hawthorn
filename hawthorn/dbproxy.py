@@ -54,7 +54,7 @@ except ImportError:
     cx_Oracle = {}
 
 from .supports import singleton
-from .modelutils import model_columns, format_mongo_value, get_dbinstance_by_model, get_model_class_name, DEFAULT_SKIP_FIELDS
+from .modelutils import model_columns, format_mongo_value, get_dbinstance_by_model, get_model_class_name, get_model_skip_response_fields
 from .utilities import url_decode, url_encode
 from .exceptionreporter import ExceptionReporter
 
@@ -326,6 +326,7 @@ class DbProxy(object):
             for unsupported_key in ['pool_timeout', 'pool_size', 'pool_use_lifo', 'max_overflow']:
                 if unsupported_key in create_engine_params:
                     del create_engine_params[unsupported_key]
+            create_engine_params['isolation_level'] = 'AUTOCOMMIT'
         elif 'mssql' == engine:
             create_engine_params['isolation_level'] = 'AUTOCOMMIT'
         if 'connect_args' in dbconf:
@@ -561,10 +562,11 @@ class DbProxy(object):
                     item[col_name] = row._data[row._keymap[getattr(model, col_name).expression._label][1]]
                 items.append(item)
         else:
+            skip_fields = get_model_skip_response_fields(model)
             for row in rows:
                 item = {}
                 for k in columns:
-                    if k in DEFAULT_SKIP_FIELDS:
+                    if k in skip_fields:
                         continue
                     item[k] = row._data[row._keymap[getattr(model, k).expression._label][1]]
                 items.append(item)
@@ -603,10 +605,11 @@ class DbProxy(object):
         
         rows = await self._execute_rdbms_result(dbinstance, qry, fetch_all = True)
         items = []
+        skip_fields = get_model_skip_response_fields(model)
         for row in rows:
             item = {}
             for k in columns:
-                if k in DEFAULT_SKIP_FIELDS:
+                if k in skip_fields:
                     continue
                 item[k] = row._data[row._keymap[getattr(model, k).expression._label][1]]
             items.append(item)
@@ -1118,8 +1121,9 @@ class DbProxy(object):
                     item = {model._reverse_db_field_map[k] if k in model._reverse_db_field_map else k: format_mongo_value(v) for k, v in row.items() if k in selections}
                     items.append(item)
             else:
+                skip_fields = get_model_skip_response_fields(model)
                 for row in rows:
-                    item = {model._reverse_db_field_map[k] if k in model._reverse_db_field_map else k: format_mongo_value(v) for k, v in row.items() if k not in DEFAULT_SKIP_FIELDS}
+                    item = {model._reverse_db_field_map[k] if k in model._reverse_db_field_map else k: format_mongo_value(v) for k, v in row.items() if k not in skip_fields}
                     items.append(item)
         else:
             conditions = {}
@@ -1194,8 +1198,9 @@ class DbProxy(object):
                     item = {model._reverse_db_field_map[k] if k in model._reverse_db_field_map else k: v for k, v in row.items() if k in selections}
                     items.append(item)
             else:
+                skip_fields = get_model_skip_response_fields(model)
                 for row in rows:
-                    item = {model._reverse_db_field_map[k] if k in model._reverse_db_field_map else k: v for k, v in row.items() if k not in DEFAULT_SKIP_FIELDS}
+                    item = {model._reverse_db_field_map[k] if k in model._reverse_db_field_map else k: v for k, v in row.items() if k not in skip_fields}
                     items.append(item)
         else:
             conditions = {}

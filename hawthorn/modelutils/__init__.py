@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-
 from bson import ObjectId
 import time, datetime
 import mongoengine
@@ -87,7 +86,8 @@ def format_mongo_value(v):
     return v
 
 MODEL_DB_MAPPING = {}
-DEFAULT_SKIP_FIELDS = {'obsoleted':True, 'created_at':True, 'updated_at':True, 'created_by':True, 'updated_by':True}
+# DEFAULT_SKIP_FIELDS = {'obsoleted':True, 'created_at':True, 'updated_at':True, 'created_by':True, 'updated_by':True}
+DEFAULT_SKIP_FIELDS = {}
 
 def get_dbinstance_by_model(model_name):
     if model_name in MODEL_DB_MAPPING:
@@ -107,3 +107,12 @@ def get_model_class_name(model) -> str:
     elif isinstance(model, str):
         return model
     return model.__class__.__name__
+
+def get_model_skip_response_fields(model: ModelBase) -> dict:
+    hidden_fields = []
+    if hasattr(model, '__hidden_response_fields__') and isinstance(getattr(model, '__hidden_response_fields__', None), list):
+        hidden_fields = getattr(model, '__hidden_response_fields__')
+    skip_fields = {k: v for k, v in DEFAULT_SKIP_FIELDS}
+    for k in hidden_fields:
+        skip_fields[k] = True
+    return skip_fields

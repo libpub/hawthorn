@@ -18,8 +18,9 @@ import asyncio
 import zeep
 from .tornadozeep import TornadoAsyncTransport
 from .exceptionreporter import ExceptionReporter
-from utilities.xmlutil import parse_xml, format_xml
-from utilities.signatureutils import sign_inputs_data_md5, sign_inputs_data_hmac
+from .utilities import tostring
+from .utilities.xmlutil import parse_xml, format_xml
+from .utilities.signatureutils import sign_inputs_data_md5, sign_inputs_data_hmac
 
 tornado.httpclient.AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
 
@@ -64,10 +65,10 @@ def async_post_json(url, params=None, json=None, headers=None, verify_cert=True,
     return False, res
 
 @tornado.gen.coroutine
-def async_http_request(method, url, params=None, body='', json=None, headers=None, verify_cert=True, **kwargs):
+def async_http_request(method: str, url: str, params: dict = None, body: str|bytes = None, json: dict = None, headers: dict = None, verify_cert: bool = True, **kwargs) -> tornado.httpclient.HTTPResponse:
     proxies = kwargs.pop('proxies', None)
     if params:
-        qrs = [k + '=' + urllib.parse.quote(v) for k,v in params.items() ]
+        qrs = [k + '=' + urllib.parse.quote(tostring(v)) for k,v in params.items() ]
         sep = '&' if '?' in url else '?'
         url += sep + '&'.join(qrs)
     if json:
@@ -279,10 +280,10 @@ def main():
                     self.write(response)
                     self.finish()
                 else:
-                    print("====== response", response)
+                    LOG.debug("====== response", response)
                     pass
             else:
-                print('not callable cb:', cb)
+                LOG.warning('not callable cb:', cb)
 
     def tornado_route(rule, **options):
         def decorator(f):

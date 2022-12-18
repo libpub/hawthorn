@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#! -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 import re
 import datetime, time
@@ -8,6 +8,7 @@ import random
 import hashlib
 import base64
 import urllib
+import json
 
 LOG = logging.getLogger('utilities')
 
@@ -28,6 +29,12 @@ class Constant(object):
         if hasattr(self, key):
             raise self.ConstError("Can't rebind const (%s)" % key)
         setattr(self, key, value)
+
+class JsonEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, bytes):
+            return obj.decode('utf-8')
+        return json.JSONEncoder.default(self, obj)
 
 def toint(val):
     if not val or val == 'None':
@@ -51,6 +58,11 @@ def todatetime(val):
     else:
         return datetime.datetime.min
     return datetime.datetime.strptime(val, '%Y-%m-%d %H:%M:%S')
+
+def tostring(val):
+    if isinstance(val, dict) or isinstance(val, list):
+        return json.dumps(val, cls=JsonEncoder)
+    return str(val)
 
 def toseconds(val):
     dt = todatetime(val)
@@ -110,6 +122,12 @@ def prepare_requests_certs_params(conf):
     if conf and 'cert' in conf and 'key' in conf:
         return (conf.get('cert'), conf.get('key'))
     return None
+
+def get_current_timestamp_millis():
+    """
+    Get current timestamp as milli seconds
+    """
+    return int(time.time() * 1000)
 
 if __name__ == '__main__':
     # todatetime('2018/01/02T03:04:05:Z')

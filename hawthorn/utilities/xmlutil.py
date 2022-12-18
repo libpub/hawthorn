@@ -1,5 +1,5 @@
 #!/usr/bin/env python3.6
-#! -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 import io
 import xml.etree.cElementTree as ET
