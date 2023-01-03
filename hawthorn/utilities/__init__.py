@@ -129,6 +129,54 @@ def get_current_timestamp_millis():
     """
     return int(time.time() * 1000)
 
+def pascal_case(txt: str):
+    """Converts xx_yy to XxYy"""
+    txt = re.sub(r"(_|-)+", " ", txt).title().replace(' ', '')
+    return txt
+
+def camel_case(txt: str):
+    """Converts xx_yy to xxYy"""
+    txt = re.sub(r"(_|-)+", " ", txt).title().replace(' ', '')
+    return txt[0].lower() + txt[1:]
+
+def snake_case(txt: str):
+    """Converts XxYy to xx_yy, XxYY to xx_yy"""
+    res = [txt[0].lower()]
+    insert_sep = txt[0] not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    for c in txt[1:]:
+        if c in ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'):
+            if insert_sep:
+                res.append('_')
+            insert_sep = False
+            res.append(c.lower())
+        elif c == '-':
+            res.append('_')
+            insert_sep = False
+        else:
+            insert_sep = True
+            res.append(c)
+     
+    return ''.join(res)
+
+def kebab_case(txt: str):
+    """Converts XxYy to xx-yy, XxYY to xx-yy"""
+    res = [txt[0].lower()]
+    insert_sep = txt[0] not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    for c in txt[1:]:
+        if c in ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'):
+            if insert_sep:
+                res.append('-')
+            insert_sep = False
+            res.append(c.lower())
+        elif c == '_':
+            res.append('-')
+            insert_sep = False
+        else:
+            insert_sep = True
+            res.append(c)
+     
+    return ''.join(res)
+
 if __name__ == '__main__':
     # todatetime('2018/01/02T03:04:05:Z')
     # todatetime('2018-01-02 03:04:05')
