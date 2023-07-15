@@ -1,15 +1,14 @@
 #!/usr/bin/env python
-#! -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
-import redis
 import logging
 import datetime
 import tornado.gen
 import aredis
 
 from .supports import singleton
-from .modelutils import model_columns, format_mongo_value, DEFAULT_SKIP_FIELDS
-from .dbproxy import DbProxy
+from .modelutils import model_columns, DEFAULT_SKIP_FIELDS
+from .cacher.filecache import FileCache
 
 LOG = logging.getLogger('components.cacheproxy')
 
@@ -20,63 +19,72 @@ class CacheProxy(object):
     """
 
     def __init__(self):
-        self.dbproxy = DbProxy()
-        self.async_redis_conn = None
+        self.cache_inst = None
     
-    def configure(self, redis_conf: dict) -> bool:
-        self.async_redis_conn = aredis.StrictRedis(host=redis_conf['host'], port=redis_conf['port'], 
-            db=redis_conf['db'], password=redis_conf['password'], retry_on_timeout=True)
+    def configure(self, conf: dict):
+        if conf.get('type', None) == 'redis':
+            self.configure_redis(conf)
+        elif conf.get('type', None) == 'file':
+            self.configure_filecache(conf.get('path', 'data/file-caching.db'))
+        else:
+            LOG.error('configure cacheproxy with configure:%s failed with unknown cache type', str(conf))
+    
+    def configure_redis(self, redis_conf: dict):
+        self.cache_inst = aredis.StrictRedis(host=redis_conf.get('host', 'localhost'), port=redis_conf.get('port', 6379), 
+            db=redis_conf.get('db', 0), password=redis_conf.get('password', None), retry_on_timeout=True)
         return True
+    
+    def configure_filecache(self, cache_path: str):
+        self.cache_inst = FileCache(cache_path)
 
     def prepare(self):
-        pass
+        if self.cache_inst == None:
+            self.configure_filecache('data/file-caching.db')
 
     @tornado.gen.coroutine
-    def getObject(self, key, keys):
+    def get_object(self, key, keys):
         self.prepare()
-        res = yield self.async_redis_conn.hmget(key, keys)
+        res = yield self.cache_inst.hmget(key, keys)
         if not res:
             return False
         result = {}
-        isAllNone = True
+        is_all_none = True
         i = 0
         for k in keys:
             v = res[i].decode() if isinstance(res[i], bytes) else res[i]
             result[k] = v
             i += 1
-            if isAllNone and v is not None:
-                isAllNone = False
-        if isAllNone:
+            if is_all_none and v is not None:
+                is_all_none = False
+        if is_all_none:
             result = False
         return result
     
     @tornado.gen.coroutine
-    def getObjects(self, key, keys):
+    def get_objects(self, key, keys):
         self.prepare()
         results = []
-        idxes = yield self.getSetsValues(key)
+        idxes = yield self.get_sets_values(key)
         for idx in idxes:
-            row = yield self.getObject(key+':'+idx, keys)
+            row = yield self.get_object(key+':'+idx, keys)
             if row is not False:
                 results.append(row)
         return results
 
     @tornado.gen.coroutine
-    def saveObject(self, key, mapping, expire=None):
+    def set_object(self, key, mapping, expire=None):
         if not mapping:
             return False
         for k,v in mapping.items():
             if v is None:
                 mapping[k] = ''
-        yield self.async_redis_conn.hmset(key, mapping)
-        if expire is not None:
-            yield self.async_redis_conn.expire(key, expire)
+        yield self.cache_inst.hmset(key, mapping, expire=expire)
         return True
 
     @tornado.gen.coroutine
-    def getSetsValues(self, key):
+    def get_sets_values(self, key):
         results = []
-        vals = yield self.async_redis_conn.smembers(key)
+        vals = yield self.cache_inst.smembers(key)
         if not vals:
             return results
         for val in vals:
@@ -85,15 +93,15 @@ class CacheProxy(object):
         return results
 
     @tornado.gen.coroutine
-    def addSetsValue(self, key, value):
-        yield self.async_redis_conn.sadd(key, value)
+    def add_sets_values(self, key, value):
+        yield self.cache_inst.sadd(key, value)
         
     @tornado.gen.coroutine
-    def getSetsValuesExtend(self, key, keys):
-        vals = yield self.getSetsValues(key)
-        return self.parseImplodedValues(vals, keys)
+    def get_sets_values_extend(self, key, keys):
+        vals = yield self.get_sets_values(key)
+        return self.parse_imploded_values(vals, keys)
 
-    def parseImplodedValues(self, rows, keys):
+    def parse_imploded_values(self, rows, keys):
         results = []
         if not rows:
             return results
@@ -114,7 +122,7 @@ class CacheProxy(object):
         return results
         
     @tornado.gen.coroutine
-    def getSortedSetsValues(self, key):
+    def get_sorted_sets_values(self, key):
         results = []
         vals = yield self.zrange(key, 0, -1, withscores=True)
         if not vals:
@@ -126,52 +134,52 @@ class CacheProxy(object):
         return results
     
     @tornado.gen.coroutine
-    def getSortedSetsValuesExtend(self, key, keys):
-        vals = yield self.getSortedSetsValues(key)
-        return self.parseImplodedValues(vals, keys)
+    def get_sorted_sets_value_extend(self, key, keys):
+        vals = yield self.get_sorted_sets_values(key)
+        return self.parse_imploded_values(vals, keys)
 
     @tornado.gen.coroutine
-    def getCacheValue(self, key):
-        val = yield self.async_redis_conn.get(key)
+    def get_cache_value(self, key):
+        val = yield self.cache_inst.get(key)
         return val
 
     @tornado.gen.coroutine
-    def scanHashKeys(self, hashKey, keyMatch, count=1000, cursor=0):
-        res = yield self.async_redis_conn.hscan(hashKey, cursor, match=keyMatch, count=count)
+    def scan_hash_keys(self, hash_key, key_match, count=1000, cursor=0):
+        res = yield self.cache_inst.hscan(hash_key, cursor, match=key_match, count=count)
         keys = []
-        nextCursor = 0
+        next_cursor = 0
         if res:
-            nextCursor = res[0]
+            next_cursor = res[0]
             for k in res[1]:
                 keys.append(k.decode() if isinstance(k, bytes) else str(k))
-        return keys, nextCursor
+        return keys, next_cursor
     
     @tornado.gen.coroutine
-    def findHashKeys(self, hashKey, keyMatch, matchKeys = {}):
+    def find_hash_keys(self, hash_key, key_match, match_keys = {}):
         keys = []
-        if not hashKey or not keyMatch or not matchKeys:
+        if not hash_key or not key_match or not match_keys:
             return keys
-        nextCursor = -1
-        while nextCursor != 0:
-            if nextCursor == -1:
-                nextCursor = 0
-            scanedKeys, nextCursor = yield self.scanHashKeys(hashKey, keyMatch, cursor=nextCursor)
+        next_cursor = -1
+        while next_cursor != 0:
+            if next_cursor == -1:
+                next_cursor = 0
+            scanedKeys, next_cursor = yield self.scan_hash_keys(hash_key, key_match, cursor=next_cursor)
             for k in scanedKeys:
-                if k in matchKeys:
+                if k in match_keys:
                     keys.append(k)
         return keys
 
     @tornado.gen.coroutine
-    def getAllHashKeys(self, hashKeyPrefix, matchKeys = {}):
-        res = yield self.async_redis_conn.hgetall(hashKeyPrefix)
+    def get_all_hash_keys(self, hash_key_prefix, match_keys = {}):
+        res = yield self.cache_inst.hgetall(hash_key_prefix)
         result = []
         for row in res:
             a = row
         return result
         
     @tornado.gen.coroutine
-    def clearByKeyPrefix(self, keyPrefix):
-        keys = yield self.async_redis_conn.keys(keyPrefix+'*')
+    def clear_by_key_prefix(self, key_prefix):
+        keys = yield self.cache_inst.keys(key_prefix+'*')
         del_keys = [[]]
         i = 0
         for k in keys:
@@ -181,18 +189,18 @@ class CacheProxy(object):
                 del_keys.append([])
 
             if i > 10:
-                yield [self.async_redis_conn.delete(*dkeys) for dkeys in del_keys]
+                yield [self.cache_inst.delete(*dkeys) for dkeys in del_keys]
                 del_keys = [[]]
                 i = 0
         
         if del_keys[0]:
-            yield [self.async_redis_conn.delete(*dkeys) for dkeys in del_keys]
+            yield [self.cache_inst.delete(*dkeys) for dkeys in del_keys]
 
     @tornado.gen.coroutine
     def incr(self, key, expire = None):
-        yield self.async_redis_conn.incr(key)
+        yield self.cache_inst.incr(key)
         if expire:
-            yield self.async_redis_conn.expire(key, expire)
+            yield self.cache_inst.expire(key, expire)
 
     @tornado.gen.coroutine
     def set(self, key, value, expire = None, px=None, nx=False, xx=False):
@@ -209,16 +217,16 @@ class CacheProxy(object):
         ``xx`` if set to True, set the value at key ``name`` to ``value`` only
             if it already exists.
         """
-        yield self.async_redis_conn.set(key, value, ex=expire, px=px, nx=nx, xx=xx)
+        yield self.cache_inst.set(key, value, ex=expire, px=px, nx=nx, xx=xx)
 
     @tornado.gen.coroutine
     def get(self, key):
-        val = yield self.async_redis_conn.get(key)
+        val = yield self.cache_inst.get(key)
         return val
 
     @tornado.gen.coroutine
     def delete(self, key):
-        val = yield self.async_redis_conn.delete(key)
+        val = yield self.cache_inst.delete(key)
         return val
 
     @tornado.gen.coroutine
@@ -237,42 +245,16 @@ class CacheProxy(object):
 
         ``score_cast_func`` a callable used to cast the score return value
         """
-        val = yield self.async_redis_conn.zrange(name, start, end, desc=desc, withscores=withscores, score_cast_func=score_cast_func)
+        val = yield self.cache_inst.zrange(name, start, end, desc=desc, withscores=withscores, score_cast_func=score_cast_func)
         return val
 
     @tornado.gen.coroutine
-    def isExistsInSets(self, key, value):
-        val = yield self.async_redis_conn.sismember(key, value)
+    def is_exists_in_sets(self, key, value):
+        val = yield self.cache_inst.sismember(key, value)
         return val
 
     @tornado.gen.coroutine
-    def loadMongoDataToCache(self, model, keyPrefix, pk, filters=None, excachecb=None, clearcache=True):
-        checkUniques = {}
-        @tornado.gen.coroutine
-        def _load_cache_pk(item):
-            cache_key = keyPrefix + self._getIndexKeyValue(item, pk)
-            if cache_key in checkUniques:
-                LOG.warning('loadToCache by key:%s that already exists.', cache_key)
-            checkUniques[cache_key] = 1
-            yield self.saveObject(cache_key, item)
-            if callable(excachecb):
-                yield excachecb(item, self.async_redis_conn)
-
-        if clearcache:
-            yield self.clearByKeyPrefix(keyPrefix)
-        yield self._loadDataFromMongoDb(model, _load_cache_pk, filters=filters)
-
-    @tornado.gen.coroutine
-    def loadMongoDataToCacheIndexedToMany(self, model, keyPrefix, indexKey, pk, filters=None, orderby=None, clearcache=True):
-        @tornado.gen.coroutine
-        def _load_cache_index(item):
-            yield self.addToCacheIndexedToMany(item, keyPrefix, indexKey, pk)
-        if clearcache:
-            yield self.clearByKeyPrefix(keyPrefix)
-        yield self._loadDataFromMongoDb(model, _load_cache_index, filters=filters, orderby=orderby)
-
-    @tornado.gen.coroutine
-    def addToCacheIndexedToMany(self, item, keyPrefix, indexKey, pk):
+    def add_to_cache_indexed_to_many(self, item, key_prefix, index_key, pk):
         if not isinstance(item, dict):
             item2 = item
             item = {}
@@ -280,79 +262,35 @@ class CacheProxy(object):
             for k in columns:
                 if k not in DEFAULT_SKIP_FIELDS:
                     item[k] = getattr(item2, k)
-        pkValue = self._getIndexKeyValue(item, pk)
-        idxValue = self._getIndexKeyValue(item, indexKey)
-        cache_key = keyPrefix + idxValue
-        yield self.async_redis_conn.sadd(cache_key, pkValue)
-        cache_key += ':' + pkValue
-        yield self.saveObject(cache_key, item)
+        pk_value = self.get_index_key_value(item, pk)
+        idx_value = self.get_index_key_value(item, index_key)
+        cache_key = key_prefix + idx_value
+        yield self.cache_inst.sadd(cache_key, pk_value)
+        cache_key += ':' + pk_value
+        yield self.set_object(cache_key, item)
 
     @tornado.gen.coroutine
-    def delFromCacheIndexedToMany(self, item, keyPrefix, indexKey, pk):
-        pkValue = self._getIndexKeyValue(item, pk)
-        idxValue = self._getIndexKeyValue(item, indexKey)
-        cache_key = keyPrefix + idxValue
-        yield self.async_redis_conn.srem(cache_key, pkValue)
-        cache_key += ':' + pkValue
-        yield self.async_redis_conn.delete(cache_key)
+    def del_from_cache_indexed_to_many(self, item, key_prefix, index_key, pk):
+        pk_value = self.get_index_key_value(item, pk)
+        idx_value = self.get_index_key_value(item, index_key)
+        cache_key = key_prefix + idx_value
+        yield self.cache_inst.srem(cache_key, pk_value)
+        cache_key += ':' + pk_value
+        yield self.cache_inst.delete(cache_key)
 
-    def _getIndexKeyValue(self, item, indexKey):
-        idxValue = ''
-        if isinstance(indexKey, list):
+    def get_index_key_value(self, item, index_key):
+        idx_value = ''
+        if isinstance(index_key, list):
             vals = []
-            for k in indexKey:
+            for k in index_key:
                 if isinstance(item, dict):
                     vals.append(str(item[k]) if item[k] is not None else '')
                 else:
                     vals.append(str(getattr(item, k, '')))
-            idxValue = ':'.join(vals)
+            idx_value = ':'.join(vals)
         else:
             if isinstance(item, dict):
-                idxValue = str(item[indexKey] if item[indexKey] is not None else '')
+                idx_value = str(item[index_key] if item[index_key] is not None else '')
             else:
-                idxValue = str(getattr(item, indexKey, ''))
-        return idxValue
-
-    @tornado.gen.coroutine
-    def _loadDataFromMongoDb(self, model, cb, filters=None, orderby=None):
-        limit = 5000
-        offset = 0
-        nrows = limit
-        modelName = str(model.__name__)
-        LOG.info("loading %s from db begining", modelName)
-        qfilters = []
-        kwfilters = {}
-        curId = None
-        if isinstance(filters, tuple):
-            for f in filters:
-                if isinstance(f, dict):
-                    for k,v in f.items():
-                        kwfilters[k] = v
-                elif isinstance(f, list):
-                    for v in f:
-                        qfilters.append(v)
-        elif isinstance(filters, dict):
-            kwfilters = filters
-        elif isinstance(filters, list):
-            qfilters = filters
-        while nrows >= limit:
-            if curId:
-                kwfilters['id__gt'] = curId
-            rows = yield self.dbproxy.query_all_mongo(model, (qfilters, kwfilters), limit)
-            nrows = 0
-            for row in rows:
-                nrows += 1
-                curId = row.get('id')
-                item = {}
-                for k in row:
-                    if k in DEFAULT_SKIP_FIELDS:
-                        continue
-                    item[k] = format_mongo_value(row.get(k))
-                if tornado.gen.is_coroutine_function(cb):
-                    yield cb(item)
-                else:
-                    cb(item)
-            offset += nrows
-            LOG.info("loading %s from db offset:%d rows:%d", modelName, offset, nrows)
-        
-        LOG.info("loading %s from db finished", modelName)
+                idx_value = str(getattr(item, index_key, ''))
+        return idx_value
