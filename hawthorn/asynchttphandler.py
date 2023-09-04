@@ -147,7 +147,15 @@ class PageNotFoundHandler(tornado.web.RequestHandler):
     def get(self):
         raise tornado.web.HTTPError(404)
 
-def async_route(rule, **options):
+def async_route(rule: str, **options):
+    """Register a tornado async handler by a callable handler
+    
+    : rule string (required): route match rule for handler
+    
+    : methods list[GET|POST|DELETE|HEAD|OPTION]: allowed http methods
+    
+    : ac callable: access control function
+    """
     def decorator(f):
         # endpoint = options.pop('endpoint', None)
         # if not endpoint:
@@ -156,6 +164,22 @@ def async_route(rule, **options):
 
         routes.routes.append((rule, GeneralTornadoHandler, dict(callback=f, methods=options.pop('methods', ['GET']), ac=ac)))
         return f
+    return decorator
+
+def async_tornado_handler(rule: str, **options):
+    """Register a tornado async handler by a callable handler
+    
+    : rule string (required): route match rule for handler
+    
+    """
+    def decorator(handler_cls):
+        # endpoint = options.pop('endpoint', None)
+        # if not endpoint:
+        #     endpoint = f.__name__
+        # ac = options.pop('ac', [])
+
+        routes.routes.append((rule, handler_cls))
+        return handler_cls
     return decorator
 
 def args_as_dict(request: tornado.httputil.HTTPServerRequest):

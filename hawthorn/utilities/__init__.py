@@ -9,6 +9,8 @@ import hashlib
 import base64
 import urllib
 import json
+import pkgutil
+import importlib
 
 LOG = logging.getLogger('utilities')
 
@@ -177,6 +179,27 @@ def kebab_case(txt: str):
      
     return ''.join(res)
 
+def get_package_name(module_name):
+    loader = pkgutil.get_loader(module_name)
+    if loader is not None and loader.is_package(module_name):
+        return module_name
+    else:
+        parts = module_name.split('.')
+        return '.'.join(parts[:-1])
+    
+def load_module_by_package_name(module_name):
+    package_name = get_package_name(module_name)
+    if package_name:
+        module_package = importlib.import_module(package_name)
+        if package_name == module_name:
+            return module_package
+        else:
+            parts = module_name.split('.')
+            short_module_name = ''.join(parts[-1:])
+            module = getattr(module_package, short_module_name, None)
+            return module
+    return None
+    
 if __name__ == '__main__':
     # todatetime('2018/01/02T03:04:05:Z')
     # todatetime('2018-01-02 03:04:05')

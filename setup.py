@@ -8,7 +8,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="hawthorn",
-    version="0.0.4",
+    version="0.0.5",
     author="kevinyjn",
     author_email="kevinyjn@gmail.com",
     description="common python programing encapsulation library",
@@ -48,7 +48,7 @@ setuptools.setup(
         "aiomysql",
         "aiosqlite",
         "pymssql",
-        "protobuf==3.14.0",
+        "protobuf==3.19.6",
         "PyJWT",
         "python-i18n[YAML]"
     ]
