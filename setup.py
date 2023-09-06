@@ -8,7 +8,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="hawthorn",
-    version="0.0.5",
+    version="0.0.6",
     author="kevinyjn",
     author_email="kevinyjn@gmail.com",
     description="common python programing encapsulation library",
