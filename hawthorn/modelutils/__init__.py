@@ -18,7 +18,7 @@ def model_columns(model):
     columns = []
     pk = None
     cls_ = model._sa_class_manager.class_
-    ref = model._sa_class_manager.deferred_scalar_loader.args[0]
+    ref = model._sa_class_manager.expired_attribute_loader.args[0]
     colmaps = {}
     for k in model._sa_class_manager._all_key_set:
         c = getattr(cls_, k)

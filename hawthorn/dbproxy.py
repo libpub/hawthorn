@@ -964,7 +964,7 @@ class DbProxy(object):
         for col in columns:
             tbl_col_name = getattr(model, col).expression.name
             if col in item._sa_instance_state.unmodified:
-                v = self.get_rdbms_instance_default_value(getattr(model, col).expression, True)
+                v = self.get_rdbms_instance_default_value(getattr(model, col).expression, True, item)
                 if v is None and col == pk:
                     continue
                 values[tbl_col_name] = v
@@ -981,26 +981,26 @@ class DbProxy(object):
                 continue
             # tbl_col_name = getattr(model, col).expression.name
             values[col] = getattr(item, col)
-            v = self.get_rdbms_instance_default_value(getattr(model, col).expression, False)
+            v = self.get_rdbms_instance_default_value(getattr(model, col).expression, False, item)
             if v is not None:
                 values[col] = v
                 defaults[col] = v
             
         return values, defaults
 
-    def get_rdbms_instance_default_value(self, column, is_insert):
+    def get_rdbms_instance_default_value(self, column, is_insert: bool, record_object: any = None):
         column_default = column.default if is_insert else column.onupdate
         if column_default is None:
             return None
         else:
-            return self._exec_rdbms_default(column, column_default, column.type)
+            return self._exec_rdbms_default(column, column_default, column.type, record_object)
 
-    def _exec_rdbms_default(self, column, default, type_):
+    def _exec_rdbms_default(self, column, default, type_, record_object: any = None):
         if default.is_sequence:
             # raise Exception("sequence default column value is not supported")
             return None # self.fire_sequence(default, type_)
         elif default.is_callable:
-            return default.arg(None)
+            return default.arg(record_object)
         elif default.is_clause_element:
             # TODO: expensive branching here should be
             raise Exception("clause default column value is not supported")

@@ -22,6 +22,7 @@ class AsyncRoutes():
     """
     def __init__(self):
         self.routes = []
+        self.default_headers = {}
 
 routes = AsyncRoutes()
 
@@ -53,6 +54,12 @@ class GeneralTornadoHandler(tornado.web.RequestHandler):
                         self._ac.append([k, f])
             elif callable(ac):
                 self._ac.append(['', ac])
+                
+    def set_default_headers(self):
+        """Responses default headers"""
+        if routes.default_headers:
+            for k, v in routes.default_headers.items():
+                self.set_header(k, v)
 
     async def get(self, *args, **kwargs):
         await self._do_callback('GET', *args, **kwargs)
@@ -65,6 +72,15 @@ class GeneralTornadoHandler(tornado.web.RequestHandler):
     
     async def delete(self, *args, **kwargs):
         await self._do_callback('DELETE', *args, **kwargs)
+    
+    async def options(self, *args, **kwargs):
+        await self._do_callback('OPTIONS', *args, **kwargs)
+    
+    async def patch(self, *args, **kwargs):
+        await self._do_callback('PATCH', *args, **kwargs)
+    
+    async def put(self, *args, **kwargs):
+        await self._do_callback('PUT', *args, **kwargs)
     
     async def _do_callback(self, method, *args, **kwargs):
         # LOG.debug(' - %s %s', self.request.host_name, self.request.uri)
@@ -181,6 +197,13 @@ def async_tornado_handler(rule: str, **options):
         routes.routes.append((rule, handler_cls))
         return handler_cls
     return decorator
+
+def set_default_headers(headers: dict = {}):
+    """Set default headers for response of each builtin async http request handers"""
+    global routes
+    routes.default_headers = {}
+    for k, v in headers.items():
+        routes.default_headers[k] = v
 
 def args_as_dict(request: tornado.httputil.HTTPServerRequest):
     if hasattr(request, '_args_as_dict'):
