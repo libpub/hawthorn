@@ -74,7 +74,11 @@ class GeneralTornadoHandler(tornado.web.RequestHandler):
         await self._do_callback('DELETE', *args, **kwargs)
     
     async def options(self, *args, **kwargs):
-        await self._do_callback('OPTIONS', *args, **kwargs)
+        if 'OPTIONS' in self.callbacks:
+            await self._do_callback('OPTIONS', *args, **kwargs)
+        else:
+            self.set_status(http.HTTPStatus.NO_CONTENT)
+            self.finish()
     
     async def patch(self, *args, **kwargs):
         await self._do_callback('PATCH', *args, **kwargs)

@@ -49,8 +49,7 @@ class ModifyingBehevior(object):
     updated_by = Column('updated_by', String(50), default=get_current_uid, onupdate=get_current_uid, comment='更新者用户ID')
 
     def get_session_uid(self):
-        print('get_session_uid', self.__session_uid)
-        if self.__session_uid:
+        if hasattr(self, '__session_uid') and self.__session_uid:
             return self.__session_uid
         return get_current_uid()
     
